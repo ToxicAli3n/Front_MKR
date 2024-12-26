@@ -3,6 +3,7 @@ from typing import Annotated, NamedTuple, Optional
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Response
 from fastapi import status
 
+from .db import database
 from .dependencies import authenticated_username
 from .models import (
     CreatePostModel,
@@ -49,8 +50,8 @@ def _links(links: list[_Link]) -> str:
     },
 )
 async def register(
-    input: Annotated[CreateUserModel, Body()],
-    response: Response,
+        input: Annotated[CreateUserModel, Body()],
+        response: Response,
 ) -> UserModel:
     """Endpoint for registering new users
 
@@ -115,8 +116,8 @@ async def login(input: Annotated[LoginModel, Body()]) -> None:
     },
 )
 async def me(
-    auth_username: Annotated[Optional[str], Depends(authenticated_username)],
-    response: Response,
+        auth_username: Annotated[Optional[str], Depends(authenticated_username)],
+        response: Response,
 ) -> UserModel:
     """Returns currenlty authenticated user"""
     if auth_username is None:
@@ -162,10 +163,10 @@ async def get_user(username: str, response: Response) -> UserModel:
     },
 )
 async def get_user_posts(
-    auth_username: Annotated[Optional[str], Depends(authenticated_username)],
-    username: str,
-    query: Annotated[PaginationParams, Query()],
-    response: Response,
+        auth_username: Annotated[Optional[str], Depends(authenticated_username)],
+        username: str,
+        query: Annotated[PaginationParams, Query()],
+        response: Response,
 ) -> list[PostModel]:
     """Returns list of posts by username
 
@@ -224,10 +225,10 @@ async def get_user_posts(
     },
 )
 async def publish_post(
-    auth_username: Annotated[Optional[str], Depends(authenticated_username)],
-    username: str,
-    response: Response,
-    input: Annotated[CreatePostModel, Body()],
+        auth_username: Annotated[Optional[str], Depends(authenticated_username)],
+        username: str,
+        response: Response,
+        input: Annotated[CreatePostModel, Body()],
 ) -> PostModel:
     """Endpoint for creating new post.
 
@@ -271,10 +272,10 @@ async def publish_post(
     },
 )
 async def read_post(
-    auth_username: Annotated[Optional[str], Depends(authenticated_username)],
-    username: str,
-    post_id: str,
-    response: Response,
+        auth_username: Annotated[Optional[str], Depends(authenticated_username)],
+        username: str,
+        post_id: str,
+        response: Response,
 ) -> PostModel:
     """Endpoint for reading post
 
@@ -311,16 +312,16 @@ async def read_post(
     },
 )
 async def like_post(
-    auth_username: Annotated[Optional[str], Depends(authenticated_username)],
-    username: str,
-    post_id: str,
-    response: Response,
+        auth_username: Annotated[Optional[str], Depends(authenticated_username)],
+        username: str,
+        post_id: str,
+        response: Response,
 ) -> None:
     """Endpoint for liking post
 
     In order to like the post it is necessary to provide correct pair of
     {username} and {post_id}. If the post with given {post_id} exists but wrong
-    {username} was provided, HTTP 404 Not Found error will be returned. 
+    {username} was provided, HTTP 404 Not Found error will be returned.
 
     This action requires authentication.
 
@@ -358,16 +359,16 @@ async def like_post(
     },
 )
 async def unlike_post(
-    auth_username: Annotated[Optional[str], Depends(authenticated_username)],
-    username: str,
-    post_id: str,
-    response: Response,
+        auth_username: Annotated[Optional[str], Depends(authenticated_username)],
+        username: str,
+        post_id: str,
+        response: Response,
 ) -> None:
     """Endpoint for unliking post
 
     In order to unlike the post it is necessary to provide correct pair of
     {username} and {post_id}. If the post with given {post_id} exists but wrong
-    {username} was provided, HTTP 404 Not Found error will be returned. 
+    {username} was provided, HTTP 404 Not Found error will be returned.
 
     This action requires authentication.
 
@@ -390,4 +391,30 @@ async def unlike_post(
             _Link(f"/api/users/{post.author.username}/posts", "posts"),
             _Link(f"/api/users/{post.author.username}/posts/{post.id}", "self"),
         ]
+    )
+
+@api.get("/posts", tags=["posts"])
+async def get_all_posts() -> list[PostModel]:
+    """Endpoint to get all posts from all users."""
+    all_posts = []
+    for user in database._storage["users"].values():
+        all_posts.extend(user.posts)
+    return sorted(
+        [
+            PostModel(
+                id=post.id,
+                author=UserModel(
+                    username=post.author.username,
+                    full_name=post.author.full_name,
+                    posts=len(post.author.posts),
+                ),
+                content=post.content,
+                likes=len(post.likes),
+                is_liked=False,  # Update based on current user session if needed
+                created_at=post.created_at,
+            )
+            for post in all_posts
+        ],
+        key=lambda x: x.created_at,
+        reverse=True
     )
